@@ -366,7 +366,6 @@ def main():
     print("  cg_compare_error.png")
     print("  all_methods_residual.png")
     print("  all_methods_error.png")
-    print("  solution_direct.png")
 
 
 if __name__ == "__main__":
