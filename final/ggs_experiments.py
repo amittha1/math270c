@@ -12,18 +12,6 @@ def make_consistent_problem(m, n, seed=0):
 
     return A, b, x_star
 def make_inconsistent_problem(m, n, seed=0):
-    """
-    Creates an inconsistent least-squares problem.
-
-    We choose x_star first, then set
-
-        b = A x_star + b0,
-
-    where b0 is approximately orthogonal to the column space of A.
-
-    This means x_star is still the least-squares solution, but b is generally
-    not exactly in the column space of A.
-    """
     rng = np.random.default_rng(seed)
 
     A = rng.standard_normal((m, n))
@@ -31,8 +19,6 @@ def make_inconsistent_problem(m, n, seed=0):
 
     z = rng.standard_normal(m)
 
-    # Project z onto the column space of A, then subtract.
-    # The result b0 is approximately orthogonal to col(A).
     projection_coeffs = np.linalg.lstsq(A, z, rcond=None)[0]
     b0 = z - A @ projection_coeffs
 
@@ -41,28 +27,18 @@ def make_inconsistent_problem(m, n, seed=0):
     return A, b, x_star
 
 def make_sparse_consistent_problem(m, n, density, seed=0):
-    """
-    Creates a synthetic sparse-looking least-squares problem.
-
-    The matrix is stored as a dense NumPy array, but most entries are zero.
-    This lets us test how the algorithms behave as the sparsity pattern changes
-    without rewriting the solvers for scipy sparse matrices.
-
-    density = fraction of nonzero entries, e.g. 0.01 means 1 percent nonzero.
-    """
     rng = np.random.default_rng(seed)
 
     while True:
         mask = rng.random((m, n)) < density
         A = rng.standard_normal((m, n)) * mask
 
-        # Make sure no column is entirely zero.
+        #check for zero col
         for j in range(n):
             if np.all(A[:, j] == 0):
                 i = rng.integers(0, m)
                 A[i, j] = rng.standard_normal()
 
-        # Make sure A has full column rank.
         if np.linalg.matrix_rank(A) == n:
             break
 
@@ -77,24 +53,6 @@ def relative_solution_error(x, x_star):
 
 
 def ggs(A, b, x_star, tol=1e-6, max_iter=200_000):
-    """
-    Greedy Gauss-Seidel for
-
-        min_x ||b - A x||_2^2.
-
-    Let r_k = b - A x_k. The normal-equation residual is A^T r_k.
-    At each iteration, GGS chooses the coordinate with largest absolute
-    normal-equation residual:
-
-        j = argmax_i |A_i^T r_k|.
-
-    Then it performs the exact coordinate update
-
-        x_{k+1} = x_k + (A_j^T r_k / ||A_j||_2^2) e_j.
-
-    This is Algorithm 2 from the paper, with the usual case that the
-    maximizing index is unique.
-    """
     m, n = A.shape
 
     x = np.zeros(n)
@@ -132,15 +90,6 @@ def ggs(A, b, x_star, tol=1e-6, max_iter=200_000):
         "times": np.array(times),
     }
 def grcd(A, b, x_star, tol=1e-6, max_iter=200_000, seed=0):
-    """
-    Greedy randomized coordinate descent.
-
-    This follows Algorithm 1 in the paper. It first builds a set of promising
-    coordinates V_k, then randomly selects one coordinate from V_k with
-    probability proportional to |A_j^T r_k|^2.
-
-    This is the main comparison method for GGS.
-    """
     rng = np.random.default_rng(seed)
 
     m, n = A.shape
@@ -198,13 +147,6 @@ def grcd(A, b, x_star, tol=1e-6, max_iter=200_000, seed=0):
     }
 
 def rgs(A, b, x_star, tol=1e-6, max_iter=200_000, seed=0):
-    """
-    Randomized Gauss-Seidel / randomized coordinate descent.
-
-    This is the basic randomized baseline discussed before GRCD and GGS.
-    At each step, we choose column j with probability proportional to
-    ||A_j||_2^2, then do the usual exact coordinate update.
-    """
     rng = np.random.default_rng(seed)
 
     m, n = A.shape
@@ -360,15 +302,6 @@ def plot_three_method_convergence(rgs_result, grcd_result, ggs_result,
     plt.show()
 
 def run_dense_experiments(sizes, trials=5, tol=1e-6, problem_type="consistent"):
-    """
-    Runs GGS and GRCD on several dense least-squares problems.
-
-    problem_type can be:
-        "consistent"
-        "inconsistent"
-
-    Each row averages over a few random trials.
-    """
     rows = []
 
     for m, n in sizes:
@@ -417,9 +350,6 @@ def run_dense_experiments(sizes, trials=5, tol=1e-6, problem_type="consistent"):
     return rows
 
 def run_sparse_density_experiment(densities, m=2000, n=100, trials=10, tol=1e-6):
-    """
-    Compares RGS, GRCD, and GGS as the density of A changes.
-    """
     rows = []
 
     for density in densities:
@@ -473,9 +403,6 @@ def run_sparse_density_experiment(densities, m=2000, n=100, trials=10, tol=1e-6)
 
 
 def print_experiment_table(rows):
-    """
-    Prints a clean table in the terminal.
-    """
     print()
     print(
         f"{'size':>12} | "
@@ -521,11 +448,6 @@ def print_sparse_density_table(rows):
         )
 
 def save_experiment_table(rows, filename="dense_consistent_table.csv"):
-    """
-    Saves the table as a CSV file.
-
-    This avoids needing pandas.
-    """
     with open(filename, "w") as f:
         f.write("size,GGS IT,GRCD IT,IT speed-up,GGS CPU,GRCD CPU,CPU speed-up\n")
 
@@ -567,11 +489,7 @@ def save_sparse_density_table(rows, filename="sparse_density_table.csv"):
 
 
 def plot_cpu_speedups(rows, filename="dense_cpu_speedups.png", title=None):
-    """
-    Makes a slide-friendly bar chart.
 
-    Values above 1 mean GGS was faster than GRCD.
-    """
     sizes = [row["size"] for row in rows]
     speedups = [row["CPU speed-up"] for row in rows]
 
@@ -644,36 +562,250 @@ def plot_sparse_density_results(rows, filename_prefix="sparse_density"):
     plt.savefig(f"{filename_prefix}_speedup.png", dpi=300)
     plt.show()
 
+def run_large_matrix_experiment(sizes, trials=5, tol=1e-6):
+
+    rows = []
+
+    for m, n in sizes:
+        print(f"Running large dense size {m} x {n}...")
+
+        ggs_iterations = []
+        grcd_iterations = []
+        ggs_times = []
+        grcd_times = []
+
+        for trial in range(trials):
+            seed = 5000 + trial
+
+            A, b, x_star = make_consistent_problem(m, n, seed=seed)
+
+            ggs_result = ggs(A, b, x_star, tol=tol)
+            grcd_result = grcd(A, b, x_star, tol=tol, seed=seed)
+
+            ggs_iterations.append(ggs_result["iterations"])
+            grcd_iterations.append(grcd_result["iterations"])
+            ggs_times.append(ggs_result["time"])
+            grcd_times.append(grcd_result["time"])
+
+            print(
+                f"  trial {trial + 1}/{trials}: "
+                f"GGS {ggs_result['time']:.3f}s, "
+                f"GRCD {grcd_result['time']:.3f}s"
+            )
+
+        ggs_it = np.mean(ggs_iterations)
+        grcd_it = np.mean(grcd_iterations)
+        ggs_cpu = np.mean(ggs_times)
+        grcd_cpu = np.mean(grcd_times)
+
+        row = {
+            "size": f"{m} x {n}",
+            "m": m,
+            "n": n,
+            "GGS IT": ggs_it,
+            "GRCD IT": grcd_it,
+            "IT speed-up": grcd_it / ggs_it,
+            "GGS CPU": ggs_cpu,
+            "GRCD CPU": grcd_cpu,
+            "CPU speed-up": grcd_cpu / ggs_cpu,
+        }
+
+        rows.append(row)
+
+    return rows
+
+def print_large_matrix_table(rows):
+    print()
+    print(
+        f"{'size':>16} | "
+        f"{'GGS IT':>10} | "
+        f"{'GRCD IT':>10} | "
+        f"{'IT spd':>8} | "
+        f"{'GGS CPU':>10} | "
+        f"{'GRCD CPU':>10} | "
+        f"{'CPU spd':>8}"
+    )
+    print("-" * 95)
+
+    for row in rows:
+        print(
+            f"{row['size']:>16} | "
+            f"{row['GGS IT']:10.2f} | "
+            f"{row['GRCD IT']:10.2f} | "
+            f"{row['IT speed-up']:8.3f} | "
+            f"{row['GGS CPU']:10.4f} | "
+            f"{row['GRCD CPU']:10.4f} | "
+            f"{row['CPU speed-up']:8.3f}"
+        )
+
+def save_large_matrix_table(rows, filename="large_matrix_table.csv"):
+    with open(filename, "w") as f:
+        f.write("size,m,n,GGS IT,GRCD IT,IT speed-up,GGS CPU,GRCD CPU,CPU speed-up\n")
+
+        for row in rows:
+            f.write(
+                f"{row['size']},"
+                f"{row['m']},"
+                f"{row['n']},"
+                f"{row['GGS IT']:.2f},"
+                f"{row['GRCD IT']:.2f},"
+                f"{row['IT speed-up']:.3f},"
+                f"{row['GGS CPU']:.4f},"
+                f"{row['GRCD CPU']:.4f},"
+                f"{row['CPU speed-up']:.3f}\n"
+            )
+
+    print(f"\nSaved table to {filename}")
+
+def plot_large_matrix_results(rows, filename_prefix="large_matrix"):
+    sizes = [row["size"] for row in rows]
+    m_values = [row["m"] for row in rows]
+
+    ggs_iterations = [row["GGS IT"] for row in rows]
+    grcd_iterations = [row["GRCD IT"] for row in rows]
+
+    ggs_times = [row["GGS CPU"] for row in rows]
+    grcd_times = [row["GRCD CPU"] for row in rows]
+
+    speedups = [row["CPU speed-up"] for row in rows]
+
+    plt.figure(figsize=(8, 5))
+    plt.bar(sizes, speedups)
+    plt.axhline(1.0, linestyle="--", linewidth=1.5)
+    plt.ylabel("CPU speed-up: GRCD time / GGS time")
+    plt.xlabel("Matrix size")
+    plt.title("Large tall matrices: GGS speed-up over GRCD")
+    plt.xticks(rotation=25, ha="right")
+    plt.tight_layout()
+    plt.savefig(f"{filename_prefix}_speedup.png", dpi=300)
+    plt.show()
+
+    plt.figure(figsize=(7, 5))
+    plt.plot(m_values, ggs_times, marker="o", linewidth=2.5, label="GGS")
+    plt.plot(m_values, grcd_times, marker="o", linewidth=2.5, linestyle="--", label="GRCD")
+    plt.xlabel("Number of rows m")
+    plt.ylabel("Average runtime (seconds)")
+    plt.title("Large tall matrices: runtime scaling")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{filename_prefix}_runtime.png", dpi=300)
+    plt.show()
+
+    plt.figure(figsize=(7, 5))
+    plt.plot(m_values, ggs_iterations, marker="o", linewidth=2.5, label="GGS")
+    plt.plot(m_values, grcd_iterations, marker="o", linewidth=2.5, linestyle="--", label="GRCD")
+    plt.xlabel("Number of rows m")
+    plt.ylabel("Average iterations")
+    plt.title("Large tall matrices: iteration counts")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{filename_prefix}_iterations.png", dpi=300)
+    plt.show()
+
 
 
 # ------------------------------------------------------MAIN--------------------------------------------------
-if __name__ == "__main__":
-    densities = [
-        0.01,
-        0.02,
-        0.05,
-        0.10,
-        0.25,
-        0.50,
-        1.00,
+def plot_large_matrix_diagnostics(rows, filename_prefix="large_matrix_diagnostic"):
+    m_values = [row["m"] for row in rows]
+
+    ggs_iterations = [row["GGS IT"] for row in rows]
+    grcd_iterations = [row["GRCD IT"] for row in rows]
+
+    ggs_times = [row["GGS CPU"] for row in rows]
+    grcd_times = [row["GRCD CPU"] for row in rows]
+
+    speedups = [row["CPU speed-up"] for row in rows]
+    iteration_ratios = [row["IT speed-up"] for row in rows]
+
+    time_gaps = [
+        row["GRCD CPU"] - row["GGS CPU"]
+        for row in rows
     ]
 
-    rows = run_sparse_density_experiment(
-        densities,
-        m=2000,
-        n=100,
-        trials=50,
+    #speed-up ratio near 1
+    plt.figure(figsize=(7, 5))
+    plt.semilogx(m_values, speedups, marker="o", linewidth=2.5)
+    plt.axhline(1.0, linestyle="--", linewidth=1.5)
+
+    plt.xlabel("Number of rows m")
+    plt.ylabel("CPU speed-up: GRCD time / GGS time")
+    plt.title("Large tall matrices: speed-up approaches 1")
+    plt.grid(True, which="both", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{filename_prefix}_speedup_ratio.png", dpi=300)
+    plt.show()
+
+    #absolute runtime gap
+    plt.figure(figsize=(7, 5))
+    plt.semilogx(m_values, time_gaps, marker="o", linewidth=2.5)
+    plt.axhline(0.0, linestyle="--", linewidth=1.5)
+
+    plt.xlabel("Number of rows m")
+    plt.ylabel("Runtime gap: GRCD time - GGS time (seconds)")
+    plt.title("Large tall matrices: runtime gap")
+    plt.grid(True, which="both", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{filename_prefix}_runtime_gap.png", dpi=300)
+    plt.show()
+
+    #iteration ratio near 1
+    plt.figure(figsize=(7, 5))
+    plt.semilogx(m_values, iteration_ratios, marker="o", linewidth=2.5)
+    plt.axhline(1.0, linestyle="--", linewidth=1.5)
+
+    plt.xlabel("Number of rows m")
+    plt.ylabel("Iteration ratio: GRCD IT / GGS IT")
+    plt.title("Large tall matrices: iteration counts become nearly identical")
+    plt.grid(True, which="both", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{filename_prefix}_iteration_ratio.png", dpi=300)
+    plt.show()
+
+    #runtime scaling of both methods
+    plt.figure(figsize=(7, 5))
+    plt.loglog(m_values, ggs_times, marker="o", linewidth=2.5, label="GGS")
+    plt.loglog(m_values, grcd_times, marker="o", linewidth=2.5, linestyle="--", label="GRCD")
+
+    plt.xlabel("Number of rows m")
+    plt.ylabel("Average runtime (seconds)")
+    plt.title("Large tall matrices: both methods scale similarly")
+    plt.legend()
+    plt.grid(True, which="both", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(f"{filename_prefix}_runtime_loglog.png", dpi=300)
+    plt.show()
+
+if __name__ == "__main__":
+    sizes = [
+        (10_000, 100),
+        (25_000, 100),
+        (50_000, 100),
+        (100_000, 100),
+        (250_000, 100),
+        (500_000, 100),
+    ]
+
+    rows = run_large_matrix_experiment(
+        sizes,
+        trials=10,
         tol=1e-6
     )
 
-    print_sparse_density_table(rows)
+    print_large_matrix_table(rows)
 
-    save_sparse_density_table(
+    save_large_matrix_table(
         rows,
-        filename="sparse_density_table.csv"
+        filename="large_matrix_table.csv"
     )
 
-    plot_sparse_density_results(
+    plot_large_matrix_results(
         rows,
-        filename_prefix="sparse_density"
+        filename_prefix="large_matrix"
+    )
+
+    plot_large_matrix_diagnostics(
+        rows,
+        filename_prefix="large_matrix_diagnostic"
     )
